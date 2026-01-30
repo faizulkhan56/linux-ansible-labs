@@ -1,0 +1,12 @@
+- name: Create lab users
+  hosts: nodes
+  tasks:
+    - name: Ensure users exist
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        groups: "{{ ((item.groups | default([])) | length > 0) | ternary(item.groups, omit) }}"
+        append: true
+        shell: /bin/bash
+        state: present
+      loop: "{{ lab_users }}"
+

@@ -1,0 +1,20 @@
+- name: Install nginx (Ubuntu/Debian)
+  ansible.builtin.apt:
+    name: nginx
+    state: present
+    update_cache: true
+  when: ansible_os_family == "Debian"
+
+- name: Deploy homepage
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: /var/www/html/index.html
+    mode: "0644"
+  notify: Restart nginx
+
+- name: Ensure nginx running
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true
+

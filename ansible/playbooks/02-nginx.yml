@@ -1,0 +1,5 @@
+- name: Nginx via role
+  hosts: nodes
+  roles:
+    - nginx
+

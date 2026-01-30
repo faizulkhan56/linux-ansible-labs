@@ -1,0 +1,10 @@
+# Common variables for all managed nodes
+ansible_become: true
+
+# Example lab user management
+lab_users:
+  - name: devops1
+    groups: ["sudo"]
+  - name: devops2
+    groups: []
+
