@@ -203,6 +203,99 @@ ansible_become=true
 
 > If you used Option B (dedicated lab key), set `ansible_ssh_private_key_file=~/.ssh/aws_lab_ed25519`.
 
+Before starting Step 11, you can use this clean final `inventory.ini` for **1 master + 1 slave** (VirtualBox / private IP style). Replace the IPs with your Host-Only IPs (usually `192.168.56.x`).
+
+```ini
+# inventory.ini
+
+[masters]
+master ansible_host=192.168.56.101
+
+[slaves]
+slave1 ansible_host=192.168.56.102
+
+[all:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=/home/ubuntu/ansible-lab/ansible-lab-key.pem
+ansible_become=true
+ansible_become_method=sudo
+ansible_ssh_common_args='-o StrictHostKeyChecking=no'
+```
+
+### Commands to run (master/control node)
+
+1) Check inventory layout
+
+```bash
+ansible-inventory -i inventory.ini --graph
+```
+
+2) Test connectivity (ping)
+
+All hosts (master + slave):
+
+```bash
+ansible all -i inventory.ini -m ping
+```
+
+Only master:
+
+```bash
+ansible masters -i inventory.ini -m ping
+```
+
+Only slave:
+
+```bash
+ansible slaves -i inventory.ini -m ping
+```
+
+3) Run a command (example)
+
+All:
+
+```bash
+ansible all -i inventory.ini -b -a "hostname && uptime"
+```
+
+Only master:
+
+```bash
+ansible masters -i inventory.ini -b -a "ip a | grep -E 'inet '"
+```
+
+Only slave:
+
+```bash
+ansible slaves -i inventory.ini -b -a "df -h"
+```
+
+4) Run a playbook
+
+All:
+
+```bash
+ansible-playbook -i inventory.ini site.yml
+```
+
+Only master:
+
+```bash
+ansible-playbook -i inventory.ini site.yml --limit masters
+```
+
+Only slave:
+
+```bash
+ansible-playbook -i inventory.ini site.yml --limit slaves
+```
+
+Tip: Make sure your key file is locked down:
+
+```bash
+chmod 600 /home/ubuntu/ansible-lab/ansible-lab-key.pem
+```
+
 ## Step 11 — First Ansible test (ping module)
 
 From master:
