@@ -24,6 +24,15 @@ We will use the **Host-Only IPs** for:
 - SSH from Windows
 - Ansible inventory (later)
 
+### Why two adapters? (theory)
+
+- **NAT Network** gives outbound internet for package updates and downloads.
+- **Host-Only** gives a stable private subnet between host and VMs for SSH and automation.
+- Using both avoids common classroom issues where internet works but host-to-VM SSH fails.
+
+![NAT vs Host-Only vs Bridged internet behavior](./image/13.png)
+*Photo credit: KodeKloud Ltd.*
+
 ## IP plan (example)
 
 Host-Only network: `192.168.56.0/24`
@@ -53,6 +62,16 @@ Host-Only network: `192.168.56.0/24`
 6. Ensure **DHCP** is enabled
 7. Save
 
+Theory:
+- In a NAT Network, VMs sit on a private subnet behind VirtualBox NAT.
+- Outbound traffic works immediately; inbound access from host typically needs separate host-only access or port forwarding.
+
+![VirtualBox NAT Network manager view](./image/10.png)
+*Photo credit: KodeKloud Ltd.*
+
+![NAT Network concept](./image/6.png)
+*Photo credit: KodeKloud Ltd.*
+
 ### Step B2: Create/verify Host-Only network
 
 1. VirtualBox → **Tools** → **Network**
@@ -64,6 +83,16 @@ Host-Only network: `192.168.56.0/24`
 5. DHCP Server:
    - You can keep DHCP enabled OR disable it and use static IPs in Ubuntu.
    - For classroom consistency, we’ll use **static IPs** on the VMs.
+
+Theory:
+- Host-only creates a private L2 segment between Windows host and VMs.
+- It is ideal for repeatable SSH labs because IPs stay in your controlled subnet.
+
+![Host Network Manager configuration example](./image/4.png)
+*Photo credit: KodeKloud Ltd.*
+
+![Host-Only network concept](./image/3.png)
+*Photo credit: KodeKloud Ltd.*
 
 ## Part C — Create 2 Ubuntu VMs
 
@@ -108,12 +137,18 @@ For **each VM**: VirtualBox → VM Settings → Network
 - Name: `LabNAT`
 - Cable connected: checked
 
+![Adapter mode options (NAT, Host-only, NAT Network, Bridged)](./image/2.png)
+*Photo credit: KodeKloud Ltd.*
+
 ### Adapter 2 (Host access)
 
 - Enable Network Adapter
 - Attached to: **Host-only Adapter**
 - Name: (your host-only, e.g. `vboxnet0`)
 - Cable connected: checked
+
+![Adapter set to Host-only](./image/5.png)
+*Photo credit: KodeKloud Ltd.*
 
 Boot both VMs.
 
@@ -132,6 +167,13 @@ ip a
 You will typically see:
 - One interface for NAT (DHCP): e.g. `enp0s3`
 - One interface for host-only: e.g. `enp0s8`
+
+Theory:
+- `ip a` confirms each NIC and its IP assignment.
+- You should see one internet-facing/private-NAT address and one host-only lab subnet address.
+
+![Reading interface IPs using ip addr show](./image/1.png)
+*Photo credit: KodeKloud Ltd.*
 
 ### Step E2: Edit netplan
 
@@ -239,6 +281,21 @@ ping 192.168.56.102
 
 If ping fails but SSH works, that’s still OK (some setups block ICMP). If both fail, troubleshoot.
 
+### NAT packet flow (theory)
+
+When a VM in NAT mode accesses a LAN service, VirtualBox rewrites source addresses:
+- VM source IP on NAT subnet is translated before exiting to LAN.
+- Return traffic maps back to the originating VM session.
+
+![NAT request flow from VM subnet to LAN service](./image/7.png)
+*Photo credit: KodeKloud Ltd.*
+
+![NAT request appears from translated source on LAN](./image/8.png)
+*Photo credit: KodeKloud Ltd.*
+
+![NAT network boundary overview](./image/9.png)
+*Photo credit: KodeKloud Ltd.*
+
 ## Part H — SSH from Windows host to each VM
 
 ### Step H1: Confirm Windows OpenSSH client exists
@@ -258,6 +315,28 @@ If not installed:
 ssh student@192.168.56.101
 ssh student@192.168.56.102
 ```
+
+### Extra networking theory (optional but useful)
+
+**Bridge mode**:
+- VM gets an IP from your real LAN and behaves like another physical device.
+- Useful when you want direct LAN visibility, but less isolated than host-only.
+
+![Bridge networking concept](./image/12.png)
+*Photo credit: KodeKloud Ltd.*
+
+**Port forwarding in NAT mode**:
+- Lets host reach services inside NAT-only VM by mapping host port -> guest port.
+- Example: host port `2222` -> guest SSH port `22`.
+
+![Basic NAT port forwarding idea](./image/14.png)
+*Photo credit: KodeKloud Ltd.*
+
+![Multiple NAT port forwarding mappings](./image/15.png)
+*Photo credit: KodeKloud Ltd.*
+
+![NAT boundary used with forwarded access paths](./image/11.png)
+*Photo credit: KodeKloud Ltd.*
 
 ## Part I — (Optional) Make VM names resolve via hosts file
 
