@@ -52,7 +52,8 @@ ls -l /etc/postgresql/
 Set a helper variable:
 
 ```bash
-PG_VER=$(psql --version | awk '{print $3}' | cut -d. -f1,2)
+# On Ubuntu 24.04, config path uses major version (for example: 16)
+PG_VER=$(ls /etc/postgresql | sort -V | tail -n 1)
 echo "$PG_VER"
 ```
 
@@ -255,6 +256,7 @@ Create log file and permissions:
 
 ```bash
 sudo touch /var/log/pg_backup_cron.log
+sudo chown "$(whoami)":"$(whoami)" /var/log/pg_backup_cron.log
 sudo chmod 664 /var/log/pg_backup_cron.log
 ```
 
@@ -317,7 +319,7 @@ sudo crontab -e
 Add:
 
 ```text
-*/5 * * * * /home/<your-user>/linux-labs/lab07/pg_backup_to_nfs.sh >> /var/log/pg_backup_cron.log 2>&1
+*/5 * * * * /home/<your-user>/linux-labs/lab07/pg_backup_to_nfs.sh
 ```
 
 Validate:
@@ -339,7 +341,7 @@ sudo tail -n 50 /var/log/pg_backup_cron.log
 Replace the every-5-minute line with a daily run (example: 2:00 AM):
 
 ```text
-0 2 * * * /home/<your-user>/linux-labs/lab07/pg_backup_to_nfs.sh >> /var/log/pg_backup_cron.log 2>&1
+0 2 * * * /home/<your-user>/linux-labs/lab07/pg_backup_to_nfs.sh
 ```
 
 Re-check:
