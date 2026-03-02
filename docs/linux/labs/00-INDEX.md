@@ -12,4 +12,5 @@ These labs teach **Linux basics used in DevOps**. Do them on either:
 4. `docs/linux/labs/04-LAB-NETWORKING-TOOLS.md`
 5. `docs/linux/labs/05-LAB-LOGS-PROCESSES.md`
 6. `docs/linux/labs/06-LAB-CRON-BASIC-AUTOMATION.md`
+7. `docs/linux/labs/07-LAB-POSTGRES-NFS-BACKUP-RESTORE-CRON.md`
 
