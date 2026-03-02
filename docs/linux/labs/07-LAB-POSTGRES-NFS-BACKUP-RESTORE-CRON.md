@@ -181,12 +181,26 @@ df -h | grep pg-backups
 
 ### Step C2: Persist mount in `/etc/fstab`
 
+This line appends one permanent NFS mount entry to `/etc/fstab`:
+
 ```bash
 echo "192.168.56.105:/srv/nfs/pg-backups /mnt/nfs/pg-backups nfs defaults,_netdev 0 0" | sudo tee -a /etc/fstab
 sudo umount /mnt/nfs/pg-backups
 sudo mount -a
 df -h | grep pg-backups
 ```
+
+Field-by-field explanation for:
+`192.168.56.105:/srv/nfs/pg-backups /mnt/nfs/pg-backups nfs defaults,_netdev 0 0`
+
+- `192.168.56.105:/srv/nfs/pg-backups` -> remote NFS source (`<server-ip>:<export-path>`)
+- `/mnt/nfs/pg-backups` -> local mount point on `192.168.56.104`
+- `nfs` -> filesystem type
+- `defaults,_netdev` -> standard mount options + delay until network is ready
+- first `0` -> disable `dump` backup flag for this entry
+- second `0` -> disable `fsck` checks for this NFS mount
+
+`sudo mount -a` validates all `/etc/fstab` entries immediately without reboot.
 
 ### Step C3: Write test to NFS
 
