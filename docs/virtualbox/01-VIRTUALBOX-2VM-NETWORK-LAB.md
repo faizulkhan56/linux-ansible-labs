@@ -33,6 +33,89 @@ We will use the **Host-Only IPs** for:
 ![NAT vs Host-Only vs Bridged internet behavior](./image/13.png)
 *Photo credit: KodeKloud Ltd.*
 
+### Networking modes overview (theory)
+
+#### NAT (Network Address Translation)
+
+- 🔍 What it is
+  - VM is placed behind a VirtualBox NAT on a private subnet (e.g., `10.0.2.0/24` internally, or similar)
+  - VirtualBox acts as a router performing address/port translation
+  - Default route points to the VirtualBox NAT device
+- 👉 Traffic flow
+  - VM → VirtualBox NAT → Host uplink → Internet
+- ✅ Key characteristics
+  - Outbound internet: ✅ works by default
+  - Host → VM: ❌ not directly (requires port forwarding)
+  - VM ↔ VM: ❌ isolated in simple NAT (no L2 between VMs)
+- 🎯 When to use
+  - Package installs (`apt`, `docker pull`), general web access from the VM
+  - You do not need inbound connectivity from host or other VMs
+- 👉 Examples
+  - Installing Kubernetes/DevOps tooling, pulling container images
+- ⚠️ Limitations
+  - Cannot SSH from host without explicit port forwarding rules
+  - Not suitable for multi-node cluster east–west communication
+
+#### Host-Only Network
+
+- 🔍 What it is
+  - Creates a private network between Host ↔ VM(s); no internet by default
+  - Example subnet: `192.168.56.0/24` (host adapter often `192.168.56.1`)
+- 👉 Communication
+  - Host ↔ VM: ✅
+  - VM ↔ VM: ✅ (on same host-only network)
+  - VM → Internet: ❌ unless you add a second adapter (e.g., NAT/NAT Network) or configure routing/NAT on the host
+- ✅ Key characteristics
+  - Fully isolated lab network, stable addressing
+  - Safe for demos; no exposure to the external LAN
+- 🎯 When to use
+  - Clusters (control-plane + workers), DB + app testing, internal-only labs
+- 👉 Example (this guide)
+  - `ubuntu-1`: `192.168.56.101`, `ubuntu-2`: `192.168.56.102`
+- ⚠️ Limitations
+  - No internet without a second adapter; typical solution: dual NICs (Host-Only + NAT/NAT Network)
+
+#### Bridged Network
+
+- 🔍 What it is
+  - VM connects directly to the physical LAN like a separate machine
+  - Gets an IP from your real router/DHCP (same L2 as your laptop/host)
+- 👉 Example
+  - Laptop: `192.168.1.5`, VM: `192.168.1.20`, Router: `192.168.1.1`
+- ✅ Key characteristics
+  - VM is first-class on the LAN; discoverable/reachable by other LAN devices
+  - Good for demos where phones/tablets/other PCs must reach the VM
+- 🎯 When to use
+  - Web/API server access from real network devices; realistic LAN testing
+- 👉 Example
+  - Access Node.js app in VM from mobile on same Wi‑Fi
+- ⚠️ Limitations
+  - Security: VM is exposed on the LAN
+  - May be blocked on corporate/WPA‑Enterprise/wifi isolation networks
+
+#### NAT Network (Advanced NAT)
+
+- 🔍 What it is
+  - Like NAT for internet egress, but VMs share a private subnet and can talk to each other
+  - DHCP can auto-assign addresses on that private segment
+- 👉 Communication
+  - VM ↔ VM: ✅ (on the NAT Network segment)
+  - VM → Internet: ✅
+  - Host → VM: ❌ direct (use Host-Only or port forwarding if needed)
+- 🎯 When to use
+  - Multi-VM labs needing both east–west (VM↔VM) traffic and internet access
+  - Lightweight clusters where host access is not required (or is via Host-Only)
+
+#### Final comparison (cheatsheet)
+
+| Feature                | NAT | Host-Only | Bridged | NAT Network |
+|------------------------|:---:|:---------:|:-------:|:-----------:|
+| Internet               | ✅  | ❌        | ✅      | ✅          |
+| Host → VM              | ❌  | ✅        | ✅      | ❌ (pfwd)   |
+| VM ↔ VM (same host)    | ❌  | ✅        | ✅      | ✅          |
+| Real LAN visibility    | ❌  | ❌        | ✅      | ❌          |
+| Best use               | Internet-only | Lab/cluster | Real exposure | Multi-VM + internet |
+
 ## IP plan (example)
 
 Host-Only network: `192.168.56.0/24`
