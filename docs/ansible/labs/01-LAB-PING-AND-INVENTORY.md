@@ -27,12 +27,27 @@ cd ~/ansible-labs/lab01
 Create `inventory.ini`:
 
 ```ini
-[nodes]
-node1 ansible_host=<NODE1_IP>
+[masters]
+master ansible_host=<MASTER_IP>
 
-[nodes:vars]
-ansible_user=<SSH_USERNAME>
+[slaves]
+slave1 ansible_host=<SLAVE1_IP>
+
+[all:vars]
+ansible_user=<SSH_USERNAME>     # e.g., ubuntu
 ansible_become=true
+
+# Optional for key-based auth:
+# ansible_ssh_private_key_file=/path/to/key
+
+# Optional for password-based labs:
+# ansible_password=<SSH_PASSWORD>
+# ansible_become_password=<SUDO_PASSWORD>
+
+# Convenience group so 'nodes' matches both masters and slaves
+[nodes:children]
+masters
+slaves
 ```
 
 If you need a specific key:
@@ -57,6 +72,8 @@ If SSH fails, fix it before continuing.
 
 ```bash
 ansible -i inventory.ini nodes -m ping
+# If you did not define [nodes], target an existing group:
+# ansible -i inventory.ini all -m ping
 ```
 
 Expected:

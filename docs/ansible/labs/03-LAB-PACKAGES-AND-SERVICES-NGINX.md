@@ -19,6 +19,14 @@ Copy `inventory.ini` from Lab 01:
 cp ~/ansible-labs/lab01/inventory.ini .
 ```
 
+Ensure your inventory has a `nodes` group (aggregating your targets). If not, use `all` or a specific group like `slaves` or add:
+
+```ini
+[nodes:children]
+masters
+slaves
+```
+
 ## Step 2 — Create the playbook
 
 Create `03-nginx.yml`:

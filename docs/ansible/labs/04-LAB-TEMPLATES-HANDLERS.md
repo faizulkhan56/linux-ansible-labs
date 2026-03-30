@@ -13,6 +13,14 @@ cd ~/ansible-labs/lab04
 cp ~/ansible-labs/lab01/inventory.ini .
 ```
 
+Ensure your inventory has a `nodes` group. If not, either use an existing group (e.g., `slaves`) in the playbook’s `hosts`, or add:
+
+```ini
+[nodes:children]
+masters
+slaves
+```
+
 ## Step 2 — Create a simple HTML template
 
 Create `templates/index.html.j2`:
