@@ -78,6 +78,20 @@ Command breakdown
 - `&&`: only run next command if previous succeeded
 - `curl -I http://localhost`: fetch HTTP headers; `head -n 1` shows status line
 
+### Quick status checks on all nodes
+
+- Full status (tolerates not installed/masked):
+
+```bash
+ansible -i inventory.ini nodes -m shell -a "systemctl status nginx --no-pager || true"
+```
+
+- Clean active/inactive check:
+
+```bash
+ansible -i inventory.ini nodes -m shell -a "systemctl is-active nginx || echo not-installed-or-masked"
+```
+
 ## Step 5 — Idempotency check
 
 Run it again:
