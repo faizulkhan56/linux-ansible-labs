@@ -96,13 +96,16 @@ Create `03-nginx-remove.yml`:
         state: absent
         purge: true
         update_cache: true
+        lock_timeout: 180
 
-    - name: Autoremove unused packages
+    - name: Autoremove unused packages (no upgrades)
       ansible.builtin.apt:
-        name: "*"
-        state: latest
         autoremove: true
-        update_cache: true
+        lock_timeout: 180
+      register: autoremove_result
+      retries: 5
+      delay: 10
+      until: autoremove_result is succeeded
 
     - name: Remove default web root if left behind
       ansible.builtin.file:
@@ -125,6 +128,10 @@ ansible -i inventory.ini nodes -b -m service -a "name=nginx state=stopped" || tr
 # Remove package and purge configs
 ansible -i inventory.ini nodes -b -m apt -a "name=nginx state=absent purge=yes update_cache=yes"
 
-# Optional: clean leftovers
+# Optional: clean leftovers and autoremove deps (will wait for locks)
+ansible -i inventory.ini nodes -b -m apt -a "autoremove=yes lock_timeout=180"
 ansible -i inventory.ini nodes -b -m file -a "path=/var/www/html state=absent"
 ```
+
+Note:
+- If you hit “Could not get lock /var/lib/dpkg/lock-frontend”, another apt process (e.g., unattended-upgrades) is running. The playbook above uses `lock_timeout` and retries to wait for the lock instead of failing. If it still fails, wait a minute and re-run.
