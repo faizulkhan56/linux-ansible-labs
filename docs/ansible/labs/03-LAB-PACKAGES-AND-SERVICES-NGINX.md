@@ -49,6 +49,17 @@ Create `03-nginx.yml`:
         enabled: true
 ```
 
+Theory — Why a playbook here
+
+- Playbooks are declarative, idempotent, and versionable. We describe the desired end state (nginx installed, service running) instead of a sequence of shell steps.
+
+Playbook breakdown
+
+- `hosts: nodes`: run this play on all machines in the `nodes` group
+- `become: true`: escalate to root for package/service tasks
+- `apt: name=nginx state=present update_cache=true`: ensure nginx is installed (safe to re-run)
+- `service: name=nginx state=started enabled=true`: start now and on boot
+
 ## Step 3 — Run the playbook
 
 ```bash
@@ -60,6 +71,12 @@ ansible-playbook -i inventory.ini 03-nginx.yml
 ```bash
 ansible -i inventory.ini nodes -m shell -a "systemctl is-active nginx && curl -I http://localhost | head -n 1"
 ```
+
+Command breakdown
+
+- `systemctl is-active nginx`: prints active state (active/inactive)
+- `&&`: only run next command if previous succeeded
+- `curl -I http://localhost`: fetch HTTP headers; `head -n 1` shows status line
 
 ## Step 5 — Idempotency check
 
@@ -118,6 +135,12 @@ Run it:
 ```bash
 ansible-playbook -i inventory.ini 03-nginx-remove.yml
 ```
+
+Command breakdown
+
+- `apt: state=absent purge=true`: remove package and its config files
+- `apt: autoremove=true`: remove unneeded dependencies (with lock_timeout/retries)
+- `file: state=absent`: delete leftover web root if this is a pure lab box
 
 Option B — Quick ad‑hoc removal (without creating a file):
 

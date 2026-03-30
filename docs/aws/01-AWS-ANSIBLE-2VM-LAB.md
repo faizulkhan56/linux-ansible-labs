@@ -33,6 +33,10 @@ In AWS Console → EC2 → **Security Groups** → Create security group:
 
 > Security note: avoid opening SSH to `0.0.0.0/0` unless you really must.
 
+Theory — Why security groups first
+
+- Security groups are stateful firewalls at the EC2 level. Defining least-privilege SSH (from your IP) reduces attack surface. HTTP(80) is only needed for web tests.
+
 ## Step 2 — Create a Key Pair
 
 EC2 → Key Pairs → Create key pair:
@@ -42,6 +46,10 @@ EC2 → Key Pairs → Create key pair:
   - Windows: `.pem` works with OpenSSH; `.ppk` if using PuTTY
 
 Download and store safely.
+
+Theory — Why key pairs
+
+- EC2 does not set passwords by default for Ubuntu images. SSH key pairs are the default, safer authentication method and enable automated access from the control node.
 
 ## Step 3 — Launch EC2 instance #1 (master)
 
@@ -93,6 +101,11 @@ ssh -i C:\keys\ansible-lab-key.pem ubuntu@<MASTER_PUBLIC_IP>
 If you selected a different Ubuntu AMI, the username is usually:
 - Ubuntu: `ubuntu`
 
+Command breakdown
+
+- `ssh -i`: specify the private key file
+- `ubuntu@<IP>`: default cloud username for Ubuntu AMIs
+
 ## Step 7 — Update Ubuntu packages (master + slave)
 
 On **master**:
@@ -130,6 +143,10 @@ ansible --version
 > - `sudo apt-get install -y python3-pip`
 > - `python3 -m pip install --user ansible`
 > - Ensure `~/.local/bin` is in PATH.
+
+Theory — Control vs managed nodes
+
+- Ansible only needs to be installed on the control node (master). Managed nodes require Python + SSH; no agent is needed.
 
 ## Step 9 — Ensure master can SSH to slave (key-based)
 
@@ -295,6 +312,14 @@ Tip: Make sure your key file is locked down:
 ```bash
 chmod 600 /home/ubuntu/ansible-lab/ansible-lab-key.pem
 ```
+
+Command breakdown highlights
+
+- `ansible-inventory --graph`: visualize groups/hosts Ansible sees
+- `-i inventory.ini`: pick your inventory
+- `-m ping`: use the ping module (safe test)
+- `-b`: become (sudo) for privileged tasks
+- `--limit`: restricts the run to a subset of hosts
 
 ## Step 11 — First Ansible test (ping module)
 

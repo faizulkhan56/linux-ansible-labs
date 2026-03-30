@@ -11,6 +11,10 @@ Assumptions for this lab (from your setup):
 - Linux username: `ubuntu`
 - Linux password: `test123` (lab-only)
 
+Theory — Why this topology
+
+- Two NICs per VM (NAT Network + Host-Only) give you both internet for package installs and a stable, isolated subnet for SSH/Ansible. Host-Only IPs remain consistent, avoiding DHCP changes.
+
 ## Prerequisites
 
 - Complete: `docs/virtualbox/01-VIRTUALBOX-2VM-NETWORK-LAB.md`
@@ -136,6 +140,12 @@ Notes:
 - `-k` asks for the SSH password interactively. If `ansible_password` is set in inventory, you can omit `-k`.
 - `-K` asks for the sudo/become password interactively. If `ansible_become_password` is set in inventory, you can omit `-K`.
 
+Command breakdown
+
+- `ansible_password`, `ansible_become_password`: lab-only convenience for password auth
+- `ansible_become=true`: enable sudo for privileged tasks
+- `ansible_ssh_common_args='-o StrictHostKeyChecking=no'`: auto-accept host key (lab-only)
+
 ### Option B — Use SSH keys (recommended)
 
 On master, create a dedicated key:
@@ -177,6 +187,12 @@ Test:
 ```bash
 ansible all -i inventory.ini -m ping
 ```
+
+Command breakdown
+
+- `ssh-keygen -t ed25519`: create modern SSH key
+- `authorized_keys`: storing the public key enables key-based login
+- `ansible_ssh_private_key_file`: which key Ansible should use
 
 ## Step 6 — First Ad-Hoc commands
 

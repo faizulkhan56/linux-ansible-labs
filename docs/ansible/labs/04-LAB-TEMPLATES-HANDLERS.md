@@ -36,6 +36,10 @@ Create `templates/index.html.j2`:
 </html>
 ```
 
+Theory — Templates
+
+- Jinja2 templates render files on targets with dynamic values from variables and facts. This avoids hand-editing configs and keeps changes reproducible.
+
 ## Step 3 — Create playbook with handler
 
 Create `04-template-handler.yml`:
@@ -73,6 +77,17 @@ Create `04-template-handler.yml`:
         state: restarted
 ```
 
+Theory — Handlers
+
+- Handlers run only when notified by tasks that report “changed.” This avoids unnecessary restarts and keeps runs idempotent and fast.
+
+Playbook breakdown
+
+- `vars: page_title`: variable available to the template
+- `template: src/dest/mode`: copies rendered file with explicit permissions
+- `notify: Restart nginx`: triggers handler only if the file changed
+- `handler -> service: restarted`: restarts nginx when notified
+
 ## Step 4 — Run
 
 ```bash
@@ -84,6 +99,11 @@ ansible-playbook -i inventory.ini 04-template-handler.yml
 ```bash
 ansible -i inventory.ini nodes -m shell -a "curl -s http://localhost | head -n 10"
 ```
+
+Command breakdown
+
+- `curl -s`: silent mode (no progress meter)
+- `| head -n 10`: show first lines to quickly confirm content
 
 ## Step 6 — Confirm handler behavior
 

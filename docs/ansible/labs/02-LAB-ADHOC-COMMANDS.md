@@ -70,11 +70,30 @@ Tip:
 ansible -i inventory.ini nodes -m ping
 ```
 
+Theory — Ad-hoc vs playbooks
+
+- Ad-hoc commands are quick, one-off actions (great for checks, small changes). Playbooks are versioned, repeatable automations for larger tasks.
+
+Command breakdown
+
+- `-i inventory.ini`: which hosts to target
+- `nodes`: group defined in your inventory (or use `all`, `masters`, `slaves`)
+- `-m ping`: use the builtin ping module (sanity check)
+
 ## Step 2 — Gather facts
 
 ```bash
 ansible -i inventory.ini nodes -m setup | head -n 40
 ```
+
+Theory — Facts
+
+- The `setup` module collects host details (OS, network, CPU). Useful for targeting by conditions or templates.
+
+Command breakdown
+
+- `-m setup`: runs facts collection
+- `| head -n 40`: show only top 40 lines for readability
 
 ## Step 3 — Run a command
 
@@ -82,17 +101,44 @@ ansible -i inventory.ini nodes -m setup | head -n 40
 ansible -i inventory.ini nodes -m command -a "uname -a"
 ```
 
+Theory — command vs shell
+
+- `command` is safer; it does not invoke a shell. Use it when you do not need shell features (pipes, redirects, `&&`).
+
+Command breakdown
+
+- `-m command -a "uname -a"`: runs binary `uname` with args on each host
+
 ## Step 4 — Run a shell pipeline (use shell module)
 
 ```bash
 ansible -i inventory.ini nodes -m shell -a "df -h | tail -n +2"
 ```
 
+Theory — When to use shell
+
+- Use `shell` for complex pipelines, redirects, environment expansion. Be mindful of quoting and idempotency.
+
+Command breakdown
+
+- `-m shell -a "df -h | tail -n +2"`: executes via shell so `|` is interpreted
+
 ## Step 5 — Install a package (Ubuntu)
 
 ```bash
 ansible -i inventory.ini nodes -b -m apt -a "name=htop state=present update_cache=yes"
 ```
+
+Theory — Becoming root
+
+- Package management requires root. `-b` (become) elevates via sudo when `ansible_become=true` is set (or configure become in inventory).
+
+Command breakdown
+
+- `-b`: use sudo
+- `-m apt`: Ubuntu/Debian package manager module
+- `name=htop state=present`: ensure package is installed (idempotent)
+- `update_cache=yes`: refresh apt cache before install
 
 Verify:
 
