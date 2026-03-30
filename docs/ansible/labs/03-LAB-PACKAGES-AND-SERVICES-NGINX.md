@@ -72,3 +72,59 @@ ansible-playbook -i inventory.ini 03-nginx.yml
 Expected:
 - Most tasks show `ok` (not `changed`)
 
+## Step 6 — Cleanup: remove nginx from all nodes
+
+Option A — Use a dedicated cleanup playbook `03-nginx-remove.yml`:
+
+Create `03-nginx-remove.yml`:
+
+```yaml
+- name: Remove nginx from all nodes
+  hosts: nodes
+  become: true
+  tasks:
+    - name: Stop and disable nginx if present
+      ansible.builtin.service:
+        name: nginx
+        state: stopped
+        enabled: false
+      ignore_errors: true
+
+    - name: Uninstall nginx (purge configuration)
+      ansible.builtin.apt:
+        name: nginx
+        state: absent
+        purge: true
+        update_cache: true
+
+    - name: Autoremove unused packages
+      ansible.builtin.apt:
+        name: "*"
+        state: latest
+        autoremove: true
+        update_cache: true
+
+    - name: Remove default web root if left behind
+      ansible.builtin.file:
+        path: /var/www/html
+        state: absent
+```
+
+Run it:
+
+```bash
+ansible-playbook -i inventory.ini 03-nginx-remove.yml
+```
+
+Option B — Quick ad‑hoc removal (without creating a file):
+
+```bash
+# Stop service if present (ignore failures)
+ansible -i inventory.ini nodes -b -m service -a "name=nginx state=stopped" || true
+
+# Remove package and purge configs
+ansible -i inventory.ini nodes -b -m apt -a "name=nginx state=absent purge=yes update_cache=yes"
+
+# Optional: clean leftovers
+ansible -i inventory.ini nodes -b -m file -a "path=/var/www/html state=absent"
+```
