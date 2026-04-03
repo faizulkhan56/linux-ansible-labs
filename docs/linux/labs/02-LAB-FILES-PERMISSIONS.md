@@ -109,6 +109,47 @@ When to change ownership:
 - Move files to be managed by a service account/team group
 - Ensure apps can read/write only what they need
 
+## Step 5.1 — Create users and a team group (devs) for testing (requires sudo)
+
+Create a group and two users: one in `devs`, one not.
+
+```bash
+sudo groupadd devs           # ok if already exists
+
+# User in devs group
+sudo useradd -m -s /bin/bash alice || true
+sudo usermod -aG devs alice
+
+# User NOT in devs
+sudo useradd -m -s /bin/bash bob || true
+
+# Verify memberships
+getent group devs
+id alice
+id bob
+```
+
+Example shared directory owned by your current user and group `devs`:
+
+```bash
+mkdir -p ~/linux-labs/lab02/shared
+sudo chgrp devs ~/linux-labs/lab02/shared
+chmod 770 ~/linux-labs/lab02/shared      # u:rwx g:rwx o:---
+ls -ld ~/linux-labs/lab02/shared
+```
+
+Quick access tests:
+
+```bash
+# Alice (in devs) can create a file
+sudo -u alice bash -c 'echo "hi from alice" > ~/linux-labs/lab02/shared/alice.txt' || echo "alice write failed"
+
+# Bob (not in devs) should be denied
+sudo -u bob bash -c 'echo "hi from bob" > ~/linux-labs/lab02/shared/bob.txt' && echo "bob write OK (unexpected)" || echo "bob write denied (expected)"
+
+ls -l ~/linux-labs/lab02/shared
+```
+
 ## Step 6 — Umask (default permission mask)
 
 ```bash
