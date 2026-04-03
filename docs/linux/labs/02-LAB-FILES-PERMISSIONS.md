@@ -222,3 +222,45 @@ chmod vs ACL (summary):
 - `chmod` (mode bits) applies to owner/group/others only; simple, universal
 - ACLs are additive, per-user/group entries; great for exceptions and shared folders
 - Effective permission is the combination: start with mode bits; ACLs can grant more (but not typically more than what the directory traversal allows)
+
+## Step 8 — Lab cleanup (revert users, groups, ACLs, and files)
+
+Run these only if you want to remove everything created in this lab.
+
+1) Remove ACLs added during the lab (safe if files/dirs exist):
+
+```bash
+sudo setfacl -b report.txt 2>/dev/null || true
+sudo setfacl -b -R ~/linux-labs/lab02/shared 2>/dev/null || true
+```
+
+2) Optional: restore typical modes (skip if deleting the lab folder next):
+
+```bash
+chmod 644 hello.txt 2>/dev/null || true
+chmod 644 umask-test.txt 2>/dev/null || true
+chmod 755 ~/linux-labs/lab02 2>/dev/null || true
+```
+
+3) Delete lab files and directories:
+
+```bash
+rm -rf ~/linux-labs/lab02
+```
+
+4) Remove test users and group (only if they were created for this lab):
+
+```bash
+# Stop any user processes (ignore errors if none)
+sudo pkill -KILL -u alice 2>/dev/null || true
+sudo pkill -KILL -u bob   2>/dev/null || true
+
+# Remove users and their home directories
+sudo userdel -r alice 2>/dev/null || true
+sudo userdel -r bob   2>/dev/null || true
+
+# Remove the devs group (will fail if still in use elsewhere)
+sudo groupdel devs 2>/dev/null || true
+```
+
+5) Reset umask by closing and reopening your shell session (umask is per-process).
