@@ -3,7 +3,7 @@
 ## Objective
 
 - Inspect IP addresses, routes, and interfaces
-- Verify DNS resolution (`getent`, `dig`)
+- Verify DNS resolution (`getent`, `dig`) and interpret **stub** vs **upstream** DNS (`/etc/resolv.conf`, `resolvectl`)
 - Test reachability (ping, traceroute)
 - See which ports are listening and which process owns them (`ss`, `netstat`)
 - Change or assign a static IP safely with **Netplan** (Ubuntu-style hosts)
@@ -97,11 +97,77 @@ sudo ip route del 172.16.0.0/16 via 192.168.56.1 dev enp0s8
 
 ### Where the system looks for DNS
 
+Most applications read **nameservers** from `/etc/resolv.conf` (or use the same settings through the C library resolver).
+
 ```bash
 cat /etc/resolv.conf
 ```
 
-On many systems this file is managed automatically (systemd-resolved, NetworkManager, or cloud-init). Use it to see which nameservers are in effect.
+On **Ubuntu and many Debian-based VMs**, you often see something like:
+
+```text
+nameserver 127.0.0.53
+options edns0 trust-ad
+search .
+```
+
+- **`options edns0`** — allow EDNS0 extensions (larger responses, better behavior with modern DNS).
+- **`trust-ad`** — trust AD (authenticated data) bit from the resolver when using DNSSEC-related features (details matter less for day-to-day labs).
+- **`search .`** — search list for short hostnames; a lone `.` effectively means “do not append a domain” for bare names.
+
+### Theory — stub resolver and `127.0.0.53`
+
+**`127.0.0.53` is not a public DNS service** like Google (`8.8.8.8`) or Cloudflare (`1.1.1.1`). It is an address on **your own machine** (loopback). On systems with **systemd-resolved**, that address is a **local DNS stub**: a small listener that accepts queries from apps, then **forwards** them to the real upstream resolvers it learned from DHCP, static config, VPN, etc., and may **cache** answers.
+
+Think of the path like this:
+
+```text
+Application  →  127.0.0.53 (systemd-resolved on loopback)  →  upstream DNS (router, ISP, 8.8.8.8, …)  →  answer back
+```
+
+So `/etc/resolv.conf` is often a **pointer to the local stub**, not the final server that talks to the internet. The **effective** upstream list is what you see in `resolvectl` (below).
+
+### End-to-end flow (example: `ping google.com`)
+
+1. You run `ping google.com`.
+2. The resolver stack reads **`nameserver 127.0.0.53`** from `/etc/resolv.conf`.
+3. The query is sent to **systemd-resolved** on the loopback stub.
+4. **systemd-resolved** picks upstream DNS (from **DHCP**, Netplan, NetworkManager, VPN, manual config), uses **cache** when valid, and may apply **split DNS** per interface.
+5. It forwards to the real resolver (e.g. what DHCP gave you), gets `google.com` → an A/AAAA record.
+6. The answer returns to your application; `ping` then uses IP connectivity as usual.
+
+### NAT (e.g. Oracle VirtualBox) — where DNS comes from
+
+With **NAT**, the hypervisor usually runs a **virtual DHCP server** for the guest. DHCP typically supplies:
+
+- IPv4 address and mask  
+- **Default gateway**  
+- **DNS server(s)** (on VirtualBox NAT, the guest often sees something like **`10.0.2.3`** as the DNS address)
+
+The guest still may show **`nameserver 127.0.0.53`** in `/etc/resolv.conf`; **systemd-resolved** receives that DHCP information on the **NAT interface** and forwards queries **out** through NAT to the host / ISP / whatever the host uses. Conceptually:
+
+```text
+VM application  →  127.0.0.53  →  DNS from DHCP (NAT)  →  host / ISP / public resolver  →  reply
+```
+
+### See the real upstream servers: `resolvectl`
+
+To see **which DNS servers systemd-resolved is actually using** (per link), run:
+
+```bash
+resolvectl status
+```
+
+Example shape (names and indexes vary):
+
+```text
+Link 2 (enp0s3)
+    DNS Servers: 10.0.2.3
+```
+
+That **`10.0.2.3`**-style address is the **upstream** resolver for that interface (common on VirtualBox NAT), while **`127.0.0.53`** in `resolv.conf` remains the **local stub** entry point.
+
+**Other setups:** If `systemd-resolved` is not used, `/etc/resolv.conf` may list `8.8.8.8` or your router directly, or be managed by **NetworkManager** / **cloud-init**. The idea is the same: the file tells apps **where to send DNS first**; that may be a stub or a full resolver.
 
 ### libc-based lookup (what most apps use)
 
