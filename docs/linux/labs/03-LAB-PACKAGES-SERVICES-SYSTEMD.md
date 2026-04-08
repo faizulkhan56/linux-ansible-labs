@@ -82,6 +82,62 @@ Key ideas:
 - unit types: `.service`, `.socket`, `.timer`, `.target`, etc. We mostly use `.service` here.
 - logs: services writing to stdout/stderr or syslog end up in the journal and are queried via `journalctl`.
 
+### Boot sequence: firmware → GRUB → kernel → systemd → target
+
+Rough order from power-on to a typical server login:
+
+```text
+Firmware (POST / UEFI handoff)
+  ↓
+Bootloader (GRUB)
+  ↓
+Linux kernel
+  ↓
+systemd (PID 1, init / service manager)
+  ↓
+default target (often multi-user.target on servers)
+  ↓
+units linked from multi-user.target.wants/ (and dependencies)
+  ↓
+enabled services start (ordering and dependencies apply)
+```
+
+- **Firmware / POST** runs hardware checks and hands off to the bootloader.
+- **GRUB** (or another bootloader) loads the kernel (and usually an initramfs).
+- The **kernel** starts **systemd** as process **1**.
+- **default.target** is commonly a symlink to **`multi-user.target`** on headless servers (desktops often use `graphical.target`, which still pulls in multi-user-like work).
+- Reaching that **target** causes systemd to start units that are **wanted** by it—see the next subsection.
+
+### What `systemctl enable` has to do with `multi-user.target.wants/`
+
+`systemctl enable <unit>` creates a **symlink** under `/etc/systemd/system/multi-user.target.wants/` (when the unit’s `[Install]` section says `WantedBy=multi-user.target`, which package units and our lab examples use). The symlink points at the real unit file—often under `/lib/systemd/system/` or `/usr/lib/systemd/system/` (paths may differ slightly by distribution; they are equivalent on many Ubuntu/Debian systems).
+
+List what is enabled for multi-user mode:
+
+```bash
+sudo ls -alrt /etc/systemd/system/multi-user.target.wants/
+```
+
+Example listing (yours will differ by packages and date):
+
+```text
+lrwxrwxrwx  1 root root   37 Mar  5 08:31 nfs-client.target -> /lib/systemd/system/nfs-client.target
+lrwxrwxrwx  1 root root   38 Mar  5 08:31 nfs-server.service -> /lib/systemd/system/nfs-server.service
+lrwxrwxrwx  1 root root   40 Mar  6 06:10 snap-lxd-37982.mount -> /etc/systemd/system/snap-lxd-37982.mount
+lrwxrwxrwx  1 root root   40 Mar 13 03:09 snap-lxd-38469.mount -> /etc/systemd/system/snap-lxd-38469.mount
+lrwxrwxrwx  1 root root   45 Mar 13 03:09 snap.lxd.activate.service -> /etc/systemd/system/snap.lxd.activate.service
+lrwxrwxrwx  1 root root   33 Mar 30 12:23 nginx.service -> /lib/systemd/system/nginx.service
+```
+
+How to read it:
+
+- Each line is a **symlink** in `.wants/`: the **left** name is the alias; the **arrow target** is the unit definition systemd loads.
+- **`nginx.service`** here means nginx is **enabled** for `multi-user.target` (same effect as `sudo systemctl enable nginx`).
+- **`nfs-client.target`** / **`nfs-server.service`** are other **enabled** units (NFS client/server) pulled in at this target.
+- **`snap-…mount`** and **`snap.lxd.activate.service`** are **Snap**-related **mount** and **service** units registered under `/etc/systemd/system/`—normal on hosts using Snap/LXD.
+
+Only **enabled** units for this target show up as symlinks here; you can **`start`** a service without **enabling** it, and it will not need a `.wants` entry. Conversely, **enable** does not replace **start**—after install you often both **enable** (for next boot) and **start** (for now).
+
 ## Step 1 — Update package index
 
 ```bash
@@ -109,7 +165,7 @@ sudo systemctl is-active nginx
 Command breakdown:
 - `status`: shows current state and last logs
 - `stop` / `start`: control runtime state
-- `enable`: persist across reboot (creates symlinks in systemd config)
+- `enable`: persist across reboot (creates a symlink under `multi-user.target.wants/` when the unit uses `WantedBy=multi-user.target`; see **Theory** above)
 - `is-enabled` / `is-active`: quick checks for boot-time and runtime state
 
 ## Unit files (bridge concept)
