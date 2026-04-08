@@ -31,6 +31,66 @@ hostname -I                 # primary IP(s) reported by the host
 
 Find the **interface name** you will use later (for example `eth0`, `ens33`, `enp0s3`) — you need it for Netplan.
 
+### Reading `ip route` output
+
+`ip route` (same data as `route -n`, but clearer) shows **where the kernel sends packets** for each destination. More specific prefixes win over broader ones; **default** is the catch-all (equivalent to `0.0.0.0/0`).
+
+Example (typical **VirtualBox**: `enp0s3` = NAT, `enp0s8` = host-only):
+
+```text
+default via 10.0.2.2 dev enp0s3 proto dhcp src 10.0.2.15 metric 100
+8.8.4.4 via 10.0.2.2 dev enp0s3 proto dhcp src 10.0.2.15 metric 100
+8.8.8.8 via 10.0.2.2 dev enp0s3 proto dhcp src 10.0.2.15 metric 100
+10.0.2.0/24 dev enp0s3 proto kernel scope link src 10.0.2.15 metric 100
+10.0.2.2 dev enp0s3 proto dhcp scope link src 10.0.2.15 metric 100
+192.168.56.0/24 dev enp0s8 proto kernel scope link src 192.168.56.105
+```
+
+Line by line:
+
+| Line | Meaning |
+|------|--------|
+| `default via 10.0.2.2 dev enp0s3 …` | **Default route:** traffic to any destination that does not match a more specific route is sent to **next-hop gateway** `10.0.2.2`, using interface **`enp0s3`**. **`proto dhcp`** = this route was installed from DHCP. **`src 10.0.2.15`** = preferred source address on that interface. **`metric 100`** = lower is preferred when multiple routes could match the same kind of destination. |
+| `8.8.4.4 via 10.0.2.2 dev enp0s3 …` | **Host route** to resolver `8.8.4.4` via the same gateway. Often appears when DHCP (or the network stack) publishes **per-address** or **classless static routes** so DNS traffic uses a known path. |
+| `8.8.8.8 via 10.0.2.2 dev enp0s3 …` | Same idea for `8.8.8.8`. |
+| `10.0.2.0/24 dev enp0s3 … scope link` | **Directly connected subnet** on `enp0s3`: hosts in `10.0.2.0/24` are reached **without** a router (on-link). **`proto kernel`** = installed automatically when the address was configured. |
+| `10.0.2.2 dev enp0s3 … scope link` | **On-link path to the gateway** itself (`10.0.2.2` is treated as reachable on `enp0s3`). |
+| `192.168.56.0/24 dev enp0s8 …` | Second NIC: **directly connected** host-only (or lab) network `192.168.56.0/24` via **`enp0s8`**, source `192.168.56.105`. No default route here — only that subnet is local on this interface unless you add routes. |
+
+Check which route the kernel will use for a given destination:
+
+```bash
+ip route get 8.8.8.8
+ip route get 192.168.56.1
+```
+
+### Adding a route
+
+**Temporary (until reboot):** use `ip route add`. You must specify destination, and either `via <gateway>` or `dev <interface>` (for on-link subnets).
+
+Examples (adjust IPs and interface names to your lab):
+
+```bash
+# Reach a remote subnet through a router on your host-only network (enp0s8)
+sudo ip route add 172.16.0.0/16 via 192.168.56.1 dev enp0s8
+
+# On-link subnet on a specific interface (no gateway)
+sudo ip route add 10.99.0.0/24 dev enp0s8
+
+# Optional second default via another interface (higher metric = lower priority)
+sudo ip route add default via 192.168.56.1 dev enp0s8 metric 200
+```
+
+Verify and remove:
+
+```bash
+ip route
+ip route get 172.16.0.1
+sudo ip route del 172.16.0.0/16 via 192.168.56.1 dev enp0s8
+```
+
+**Persistent:** routes added with `ip route add` are lost on reboot. On Ubuntu, add them under **`routes:`** in Netplan (see Step 5).
+
 ---
 
 ## Step 2 — DNS: resolver, lookups, and `dig`
@@ -232,6 +292,27 @@ This applies the config and asks you to confirm; it rolls back if you do not.
    ```
 
 **DHCP again:** set `dhcp4: true` and remove static `addresses` / `routes` / `nameservers` as needed, then `sudo netplan apply`.
+
+### Add or keep extra routes (Netplan)
+
+To make a route survive reboot, declare it on the correct interface. Example: **same machine as above**, send `172.16.0.0/16` via a router at `192.168.56.1` on `enp0s8` (merge into your existing `ethernets` stanza; do not duplicate the top-level `network:` key):
+
+```yaml
+network:
+  version: 2
+  ethernets:
+    enp0s8:
+      routes:
+        - to: 172.16.0.0/16
+          via: 192.168.56.1
+```
+
+You can combine **addresses**, **default** route, and **extra** `routes:` on the same interface. After editing:
+
+```bash
+sudo netplan try
+ip route | grep 172.16
+```
 
 ---
 
