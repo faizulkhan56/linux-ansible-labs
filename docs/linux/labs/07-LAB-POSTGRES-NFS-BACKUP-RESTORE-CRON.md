@@ -7,6 +7,7 @@
   - `192.168.56.105` = NFS server
 - Install and configure PostgreSQL on `192.168.56.104`
 - Create admin/app users, test database, and table data
+- Apply a **least-privilege** permission layer so `appuser` can connect and **read** application data (not administer the cluster)
 - Configure NFS export on `192.168.56.105` and mount it on `192.168.56.104`
 - Write a backup script that stores PostgreSQL dumps on NFS
 - Validate restore by dropping and rebuilding the test DB from backup
@@ -118,11 +119,121 @@ sudo -u postgres psql -d appdb -c "INSERT INTO employees (name, team) VALUES ('A
 sudo -u postgres psql -d appdb -c "SELECT * FROM employees;"
 ```
 
-Optional TCP test to localhost (forces password auth path):
+### Step A6: Permission layer for `appuser` (read-only on `appdb`)
+
+**Why do this?** The application should not run as a superuser. Grant only what it needs: attach to the right database, use the `public` schema, **read** tables (and, when applicable, read sequences). That limits damage if credentials leak and keeps access easier to audit.
+
+After Step A5, `appuser` can authenticate but has **no** rights on `appdb` objects until you grant them. Typical layers:
+
+1. **CONNECT** on the database — required to open a session against `appdb`.
+2. **USAGE** on the schema — required to reference objects in `public`.
+3. **SELECT** on tables — read rows in existing tables.
+4. **DEFAULT PRIVILEGES** — **new** tables and sequences created later get the same grants automatically; without this, migrations often break readers in production.
+5. **Sequences** (recommended here) — `SERIAL` / identity columns use sequences; some clients need **USAGE** and **SELECT** on those objects.
+
+Open a shell as the PostgreSQL superuser and connect to `appdb`:
+
+```bash
+sudo -u postgres psql -d appdb
+```
+
+Run:
+
+```sql
+-- CONNECT: allow sessions on database appdb
+GRANT CONNECT ON DATABASE appdb TO appuser;
+```
+
+**Explanation:** `CONNECT` is the database-level gate. Without it, the role cannot select `appdb` even if you later add table grants.
+
+```sql
+-- USAGE: allow resolving names in schema public
+GRANT USAGE ON SCHEMA public TO appuser;
+```
+
+**Explanation:** Permissions are scoped per schema. `USAGE` on `public` lets the role reference objects in that schema so table grants behave as expected.
+
+```sql
+-- SELECT: read all tables that already exist in public
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO appuser;
+```
+
+**Explanation:** `ALL TABLES` covers **current** tables only, not objects created tomorrow.
+
+```sql
+-- Default privileges for NEW tables created by role "postgres"
+-- (This lab creates tables with sudo -u postgres; match FOR ROLE to the creator.)
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  GRANT SELECT ON TABLES TO appuser;
+```
+
+**Explanation:** `ALTER DEFAULT PRIVILEGES` is **not** retroactive. It applies to objects **created by** the named role after this runs. If migrations use `dbadmin` (or another role) to create tables, add the same pattern with `FOR ROLE dbadmin`.
+
+```sql
+-- Sequences (SERIAL on employees.id, etc.)
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO appuser;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO appuser;
+```
+
+**Explanation:** Sequences are separate objects from tables; granting them avoids surprises for tools that touch sequence metadata.
+
+```sql
+\q
+```
+
+**Verify grants** (as `postgres`):
+
+```bash
+sudo -u postgres psql -d appdb -c "SELECT table_schema, table_name, privilege_type FROM information_schema.role_table_grants WHERE grantee = 'appuser' ORDER BY table_name, privilege_type;"
+```
+
+You should see `SELECT` on `employees` (and related entries as applicable).
+
+#### Optional: `readonly` role (RBAC)
+
+Many teams define a **non-login** role that holds read grants, then grant **membership** to application users. Use a fresh `psql` session as `postgres` on `appdb` (for a greenfield lab VM you can use this pattern **instead of** the direct-to-`appuser` grants above, or keep both—direct grants and membership are redundant but harmless):
+
+```bash
+sudo -u postgres psql -d appdb
+```
+
+```sql
+CREATE ROLE readonly NOLOGIN;
+
+GRANT CONNECT ON DATABASE appdb TO readonly;
+GRANT USAGE ON SCHEMA public TO readonly;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  GRANT SELECT ON TABLES TO readonly;
+
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO readonly;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO readonly;
+
+GRANT readonly TO appuser;
+\q
+```
+
+**Why:** One definition of “reader”; add more users with `GRANT readonly TO otheruser`. Revoke or change access in one place instead of duplicating grants per login.
+
+#### Test as `appuser`: database role vs Linux user
+
+`appuser` is a **PostgreSQL role with LOGIN**. It does **not** need a Linux account. **`sudo -u appuser`** switches the **OS** user, so you may see `unknown user appuser`—that is expected if no Unix user exists.
+
+Use the client’s **`-U`** to choose the **database** user and authenticate per `pg_hba.conf`. Over **TCP to localhost**, this lab’s `host ... md5` (or SCRAM) rules apply—**not** peer auth:
 
 ```bash
 PGPASSWORD='AppPass123!' psql -h 127.0.0.1 -U appuser -d appdb -c "SELECT current_user, current_database();"
+PGPASSWORD='AppPass123!' psql -h 127.0.0.1 -U appuser -d appdb -c "SELECT id, name, team FROM employees;"
 ```
+
+**Peer authentication:** `psql -U appuser -d appdb` **without** `-h` often uses **peer** in `pg_hba.conf` (maps to the Linux username). That fails when there is no OS user `appuser`. Using **`-h 127.0.0.1`** forces TCP and password auth as configured above.
+
+**Why `sudo -u postgres psql` works:** `postgres` is typically both a **Linux** user and a PostgreSQL superuser, so local peer connections from that OS account succeed.
+
+For a remote database host, add **`-h <server-ip>`**.
 
 ---
 
