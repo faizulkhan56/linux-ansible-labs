@@ -86,6 +86,61 @@ sudo mount -a
 df -h | grep data-test
 ```
 
+### Disk partition test — How `/dev/sdb1` and `/dev/sdb2` are defined
+
+Partitions such as `/dev/sdb1` and `/dev/sdb2` are not predefined by the kernel. You create them with a partitioning tool, for example:
+
+- `fdisk`
+- `parted`
+
+#### Example with `fdisk`
+
+Suppose `/dev/sdb` is a new empty 10 GB disk.
+
+Start:
+
+```bash
+sudo fdisk /dev/sdb
+```
+
+Inside `fdisk`, create the **first partition**:
+
+1. Press **n** for new.
+2. Choose **p** for primary.
+3. Partition number: **1**
+4. First sector: press **Enter** (accept default).
+5. Last sector: set size, for example **+5G**
+
+This creates `/dev/sdb1`.
+
+Create the **second partition**:
+
+1. Press **n**
+2. Choose **p**
+3. Partition number: **2**
+4. First sector: press **Enter**
+5. Last sector: press **Enter** for the remaining space
+
+This creates `/dev/sdb2`.
+
+**Write changes** to disk:
+
+- Press **w**
+
+After that, on the VM:
+
+```bash
+lsblk
+```
+
+You may see something like:
+
+```text
+sdb    10G
+├─sdb1  5G
+└─sdb2  5G
+```
+
 ---
 
 ## Part B — Add Disk #2 (2 GB) for LVM
