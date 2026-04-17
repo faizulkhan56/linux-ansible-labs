@@ -86,6 +86,162 @@ sudo mount -a
 df -h | grep data-test
 ```
 
+### `/etc/fstab` — theoretical concepts
+
+Each non-comment line tells the system **what** to mount, **where**, **how**, and **when** (at boot). One-line memory: *fstab = what to mount, where, how, and when.*
+
+#### Structure of `/etc/fstab`
+
+General format (six fields, whitespace-separated):
+
+```text
+<device>   <mount_point>   <filesystem>   <options>   <dump>   <fsck>
+```
+
+Example (matches Step A4 above; replace the UUID with yours):
+
+```text
+UUID=<DISK1_UUID>   /mnt/data-test   ext4   defaults   0   2
+```
+
+#### Field-by-field explanation
+
+**1. Device (`UUID=…` or `/dev/…`)**
+
+Identifies the block device. Prefer **`UUID=…`** from `blkid`: device names such as `/dev/sdb` can change to `/dev/sdc` after reboot or hardware changes; the UUID stays stable.
+
+```bash
+sudo blkid "$DISK1"
+```
+
+Example line from `blkid` output:
+
+```text
+/dev/sdb1: UUID="1234-ABCD-..." TYPE="ext4"
+```
+
+In `/etc/fstab` you copy the `UUID="..."` value as `UUID=1234-ABCD-...` (no quotes in fstab).
+
+**2. Mount point**
+
+Directory where the filesystem is attached. File and directory paths on that filesystem appear under this path (for example disk content under `/mnt/data-test`).
+
+The directory **must exist** before mount (as in Step A3):
+
+```bash
+sudo mkdir -p /mnt/data-test
+```
+
+**3. Filesystem type**
+
+Examples:
+
+| Type   | Typical use              |
+|--------|--------------------------|
+| `ext4` | Common default on Linux  |
+| `xfs`  | Large files, performance |
+| `nfs`  | Network filesystem       |
+| `vfat` | Removable / Windows USB  |
+
+**4. Mount options**
+
+`defaults` is a shortcut for: `rw`, `suid`, `dev`, `exec`, `auto`, `nouser`, `async`.
+
+| Option   | Meaning                                      |
+|----------|-----------------------------------------------|
+| `rw`     | Read/write                                    |
+| `suid`   | Honor set-user-ID / set-group-ID bits         |
+| `dev`    | Interpret device files on this filesystem     |
+| `exec`   | Allow executing binaries from this mount      |
+| `auto`   | May be mounted by `mount -a` (e.g. at boot)   |
+| `nouser` | Only root may mount (unless other rules apply)|
+| `async`  | Writes may be deferred (not fully synchronous)|
+
+Other entries often use extra options (for example `nofail`, `_netdev` for NFS or network-backed storage); those are not required for this lab’s simple disk line.
+
+**5. Dump (backup flag)**
+
+- `0` — do not include this filesystem in **`dump`(8)**-style backups.
+- `1` — eligible for inclusion when `dump` is configured to use `/etc/fstab`.
+
+On modern systems **`dump` is rarely used**; backups are usually done with tools such as `rsync`, snapshots, cloud backup, or orchestration-specific backup (for example Velero on Kubernetes, EBS snapshots on AWS). The field remains for **historical Unix compatibility**. **Practical rule: use `0`** unless you have a deliberate `dump` setup.
+
+Setting `1` has **no effect** unless you actually run and configure `dump`.
+
+**6. Fsck pass order (filesystem check at boot)**
+
+Tells the boot process **whether** to run `fsck` on this filesystem and **relative order**:
+
+| Value | Meaning                                      |
+|-------|----------------------------------------------|
+| `0`   | Do not run `fsck` on this entry at boot    |
+| `1`   | Check **first** — reserved for **root** (`/`) |
+| `2`   | Check **after** root; use for other local disks |
+
+Example roles:
+
+- Root (`/`) should use pass **`1`** so it is checked before other filesystems that may depend on it.
+- Normal data volumes (such as `/mnt/data-test`) typically use **`2`**.
+- Entries that must not be fsck’d at boot use **`0`**: NFS, `tmpfs`, `proc`, `sysfs`, and many network or virtual filesystems.
+
+**Why use `0` (skip fsck)?**
+
+- Some filesystem types are not checked this way (NFS, `tmpfs`, etc.).
+- Skipping fsck on **non-critical** or **large** disks can shorten boot time (trade-off vs. repair at boot).
+- Ephemeral or externally managed storage may not need a boot-time check.
+
+**Mistakes to avoid**
+
+- Root as **`0`** in the last column (e.g. `… / ext4 defaults 0 0` for the sixth field) — root should normally be **`1`** so it is checked first.
+- A non-root disk with **`1`** — can **compete** with root ordering and cause confusing boot behavior; non-root local ext4 volumes should usually be **`2`**.
+
+**Correct pattern (illustrative)**
+
+```text
+UUID=<ROOT_UUID>     /           ext4   defaults   0   1
+UUID=<DATA_UUID>     /data       ext4   defaults   0   2
+server:/export       /mnt/nfs    nfs    defaults   0   0
+tmpfs                /run        tmpfs  defaults   0   0
+```
+
+**Boot flow (simplified)**
+
+Boot continues to multi-user; local filesystems with pass `1` then `2` are candidates for `fsck` ordering (implementation details depend on init system). Pass **`0`** entries are **skipped** for this ordering.
+
+#### Combined meaning (Step A4 line)
+
+| Part        | Role                                      |
+|------------|-------------------------------------------|
+| `UUID=…`  | Find the disk reliably                    |
+| `/mnt/…`  | Attach it here                          |
+| `ext4`    | Filesystem driver / type                 |
+| `defaults`| Normal read/write mount behavior         |
+| `0`       | Not included in legacy `dump` backups    |
+| `2`       | Fsck after root at boot                  |
+
+#### Verify after editing `/etc/fstab`
+
+Always run:
+
+```bash
+sudo mount -a
+```
+
+If this prints **no errors**, the new lines are syntactically valid and mountable under current conditions.
+
+**Common mistakes**
+
+- Wrong or stale UUID after recreating the partition.
+- Mount point directory missing.
+- Typo in filesystem type (`ext4` vs `ext3`, etc.).
+- Wrong **fsck** pass number for root vs. other disks.
+
+**Where `/etc/fstab` matters in practice**
+
+Persistent local disks, NFS mounts, cloud block volumes attached to a VM, and static mounts on nodes that run containers or stateful workloads often use `/etc/fstab` or an equivalent generated by the distro (systemd mount units can express the same idea).
+
+---
+
 ### Disk partition test — How `/dev/sdb1` and `/dev/sdb2` are defined
 
 Partitions such as `/dev/sdb1` and `/dev/sdb2` are not predefined by the kernel. You create them with a partitioning tool, for example:
