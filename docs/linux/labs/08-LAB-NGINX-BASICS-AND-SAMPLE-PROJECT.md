@@ -5,8 +5,9 @@
 - Learn what Nginx does in simple terms
 - Understand basic Nginx config layout on Ubuntu
 - Install and run Nginx
-- Create a simple static sample project
-- Configure Nginx to serve that project
+- Create a simple static sample project (site root plus `/about`, `/faq`, and `/home`)
+- Understand what **`$uri`** means and how **`try_files $uri $uri/`** maps URLs to files and directories
+- Configure Nginx to serve that project (catch‑all `location /`, optional explicit `location` blocks)
 - Test locally and from another machine
 
 ## Before you start (theory)
@@ -25,6 +26,7 @@ Nginx is a fast web server. In beginner labs, we commonly use it to:
 - **root**: folder where web files are served from
 - **index**: default file such as `index.html`
 - **location**: URL path rule, for example `location /`
+- **$uri**: Nginx variable holding the **normalized request path** (decoded, without the query string). Examples: `/`, `/about`, `/style.css`. Nginx uses it together with `root` to build the path to a file or directory on disk.
 
 ### Basic config structure on Ubuntu
 
@@ -38,6 +40,34 @@ Common workflow:
 2. link it into `sites-enabled`
 3. test syntax (`nginx -t`)
 4. reload service (`systemctl reload nginx`)
+
+### How `try_files $uri $uri/` relates to `$uri` (read before Step 4)
+
+Many sample configs use:
+
+```nginx
+location / {
+    try_files $uri $uri/ =404;
+}
+```
+
+With `root /var/www/sample-project;`, Nginx resolves paths like this:
+
+1. **`$uri` as a file** — For a request such as `GET /style.css`, Nginx checks whether the file  
+   `/var/www/sample-project` + `/style.css` exists. If yes, that file is served.
+2. **`$uri/` as a directory** — If the file step fails, Nginx checks whether a **directory** named after the path exists (for `GET /about`, it looks for a folder `about/` under `root`). If it exists, Nginx continues in that directory and can serve the configured **`index`** (for example `index.html`).
+3. **`=404`** — If neither a matching file nor directory is found, Nginx returns **404 Not Found**.
+
+So you can add URLs like `/about`, `/faq`, or `/home` **without** extra `location` blocks as long as you mirror them with folders (or files) under `root`:
+
+| Browser URL (typical) | On disk under `root` (this lab) |
+|----------------------|----------------------------------|
+| `/` | `index.html` (via `index`) |
+| `/about` or `/about/` | `about/index.html` |
+| `/faq` or `/faq/` | `faq/index.html` |
+| `/home` or `/home/` | `home/index.html` |
+
+Later, if a path needs **different** rules (another `root`, authentication, caching headers, PHP, etc.), you add a dedicated `location` for that prefix. Step 4 includes the usual catch‑all; an optional explicit `location` example appears after Step 4 for comparison.
 
 ---
 
@@ -102,6 +132,11 @@ sudo tee /var/www/sample-project/index.html > /dev/null <<'EOF'
 </head>
 <body>
   <h1>Nginx 101 Lab</h1>
+  <nav>
+    <a href="/about/">About</a> ·
+    <a href="/faq/">FAQ</a> ·
+    <a href="/home/">Home</a>
+  </nav>
   <p id="msg">If you can read this, Nginx is serving your sample project.</p>
   <script src="/app.js"></script>
 </body>
@@ -124,6 +159,60 @@ Create `app.js`:
 ```bash
 sudo tee /var/www/sample-project/app.js > /dev/null <<'EOF'
 console.log("Nginx sample project loaded");
+EOF
+```
+
+Create extra pages for other paths (same `root`, no extra `location` required yet — `try_files $uri $uri/` will find each folder’s `index.html`):
+
+```bash
+sudo mkdir -p /var/www/sample-project/about /var/www/sample-project/faq /var/www/sample-project/home
+```
+
+`about` page:
+
+```bash
+sudo tee /var/www/sample-project/about/index.html > /dev/null <<'EOF'
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8" /><title>About — Nginx 101</title></head>
+<body>
+  <h1>About</h1>
+  <p>This page is served from <code>/var/www/sample-project/about/index.html</code> for URL <code>/about/</code>.</p>
+  <p><a href="/">Back to home</a></p>
+</body>
+</html>
+EOF
+```
+
+`faq` page:
+
+```bash
+sudo tee /var/www/sample-project/faq/index.html > /dev/null <<'EOF'
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8" /><title>FAQ — Nginx 101</title></head>
+<body>
+  <h1>FAQ</h1>
+  <p>This page is served from <code>/var/www/sample-project/faq/index.html</code> for URL <code>/faq/</code>.</p>
+  <p><a href="/">Back to home</a></p>
+</body>
+</html>
+EOF
+```
+
+`home` page:
+
+```bash
+sudo tee /var/www/sample-project/home/index.html > /dev/null <<'EOF'
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8" /><title>Home section — Nginx 101</title></head>
+<body>
+  <h1>Home section</h1>
+  <p>This page is served from <code>/var/www/sample-project/home/index.html</code> for URL <code>/home/</code>.</p>
+  <p><a href="/">Back to site root</a></p>
+</body>
+</html>
 EOF
 ```
 
@@ -150,12 +239,18 @@ server {
     root /var/www/sample-project;
     index index.html;
 
+    # $uri = request path; try_files: file → directory (with index) → 404
     location / {
         try_files $uri $uri/ =404;
     }
 }
 EOF
 ```
+
+Theory note (ties to the table in “How `try_files`…”):
+
+- Requests to `/`, `/about`, `/faq`, `/home` are all handled by this single `location /` because each maps to a real file or directory under the same `root`.
+- If you later need **different** behavior per prefix, add more specific `location` blocks (see optional block after this step).
 
 Enable it:
 
@@ -177,6 +272,44 @@ sudo systemctl reload nginx
 sudo systemctl status nginx --no-pager
 ```
 
+### Optional — explicit `location` blocks for `/about`, `/faq`, `/home`
+
+You **do not** need the following if the catch‑all `location /` with `try_files` already works. Use this pattern when you want a clear per‑URL section in config (headers, logging, `alias`, PHP, rate limits, etc.):
+
+```bash
+sudo tee /etc/nginx/sites-available/sample-project.conf > /dev/null <<'EOF'
+server {
+    listen 80;
+    listen [::]:80;
+
+    server_name _;
+    root /var/www/sample-project;
+    index index.html;
+
+    # Prefix locations: longer/more specific paths can be listed before the catch‑all.
+    location /about/ {
+        try_files $uri $uri/ =404;
+    }
+
+    location /faq/ {
+        try_files $uri $uri/ =404;
+    }
+
+    location /home/ {
+        try_files $uri $uri/ =404;
+    }
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
+EOF
+```
+
+Then run `sudo nginx -t` and `sudo systemctl reload nginx` again.
+
+Note: with the **same** `root` everywhere, behavior matches the single `location /` example; the value is **organization and a place to attach per‑path directives** later.
+
 ---
 
 ## Step 5 — Test your sample project
@@ -188,6 +321,21 @@ curl -I http://localhost
 curl http://localhost | head -n 10
 ```
 
+Paths under the same site (check titles or status **200**):
+
+```bash
+curl -I http://localhost/about/
+curl -I http://localhost/faq/
+curl -I http://localhost/home/
+curl -s http://localhost/about/ | head -n 5
+```
+
+Optional: many browsers request `/about` without a trailing slash; Nginx may respond with **301** redirect to `/about/` when the directory exists — both are normal:
+
+```bash
+curl -I http://localhost/about
+```
+
 ### Test from another VM/host
 
 From another machine on same network (replace IP):
@@ -195,6 +343,7 @@ From another machine on same network (replace IP):
 ```bash
 curl -I http://<NGINX_VM_IP>
 curl http://<NGINX_VM_IP> | head -n 10
+curl -I http://<NGINX_VM_IP>/about/
 ```
 
 If using browser, open:
