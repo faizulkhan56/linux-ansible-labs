@@ -123,6 +123,38 @@ ansible -i inventory.ini nodes -m command -a "last -n 1 reboot"
 
 If you truly need `last reboot | head -1`, use **`-m shell`** instead for that one check.
 
+### 11. Pipes: `shell` vs `command` (same `-a` string)
+
+**Correct `shell` version** (pipeline runs on the remote host):
+
+```bash
+ansible -i inventory.ini nodes -m shell -a "echo hello | wc -c"
+```
+
+This works because **`shell`** runs your string through a shell on the managed node, so the shell understands **`|`** and wires **stdout** of `echo` into **stdin** of `wc`. You should see a small integer (line length including newline, often **6**).
+
+**`command` module counterpart** (same string, wrong module):
+
+```bash
+ansible -i inventory.ini nodes -m command -a "echo hello | wc -c"
+```
+
+This does **not** run a pipeline. **`command`** invokes a program without a shell; Ansible passes the whole `-a` string as arguments to **`echo`**. Roughly, the remote process behaves like:
+
+```text
+echo  hello  '|'  wc  -c
+```
+
+So the printed line is literally something like:
+
+```text
+hello | wc -c
+```
+
+It does **not** count characters—there is no `wc` process fed by a pipe.
+
+**Takeaway:** Any time you need **`|`, `>`, `>>`, `&&`, `;`, `*`** globbing from the shell, or similar, use **`-m shell`** (or refactor to a real script / dedicated Ansible modules). Use **`-m command`** when a single executable and its argv are enough.
+
 ---
 
 ## Part 2 — Same ideas as a playbook
@@ -249,3 +281,4 @@ ansible -i inventory.ini nodes -b -m command -a "rm -f /tmp/ansible-demo.txt"
 | 8 | `ansible -i inventory.ini nodes -b -m command -a "touch /tmp/testfile"` |
 | 9 | `ansible -i inventory.ini nodes -b -m command -a "rm -f /tmp/testfile"` |
 | 10 | `ansible -i inventory.ini nodes -m command -a "last -n 1 reboot"` |
+| 11 | Pipe contrast: **`shell`** with `echo hello` + pipe + `wc -c` vs **`command`** with the same `-a` string — see **§11** above (two commands). |

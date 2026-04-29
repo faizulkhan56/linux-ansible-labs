@@ -123,37 +123,7 @@ Command breakdown
 
 - `-m shell -a "df -h | tail -n +2"`: executes via shell so `|` is interpreted
 
-### Example — pipe with `shell` vs `command`
-
-**Correct `shell` version** (pipeline runs on the remote host):
-
-```bash
-ansible -i inventory.ini nodes -m shell -a "echo hello | wc -c"
-```
-
-This works because **`shell`** runs your string through a shell on the managed node, so the shell understands **`|`** and wires **stdout** of `echo` into **stdin** of `wc`. You should see a small integer (line length including newline, often **6**).
-
-**`command` module counterpart** (same string, wrong module):
-
-```bash
-ansible -i inventory.ini nodes -m command -a "echo hello | wc -c"
-```
-
-This does **not** run a pipeline. **`command`** invokes a program without a shell; Ansible passes the whole `-a` string as arguments to **`echo`**. Roughly, the remote process behaves like:
-
-```text
-echo  hello  '|'  wc  -c
-```
-
-So the printed line is literally something like:
-
-```text
-hello | wc -c
-```
-
-It does **not** count characters—there is no `wc` process fed by a pipe.
-
-**Takeaway:** Any time you need **`|`, `>`, `>>`, `&&`, `;`, `*`** globbing from the shell, or similar, use **`-m shell`** (or refactor to a real script / dedicated Ansible modules). Use **`-m command`** when a single executable and its argv are enough.
+For a second contrast (**`echo hello | wc -c`** with `shell` vs `command`), see **`02-LAB-COMMAND-MODULE-BASIC.md`** — Part 1, **§11** (after the last-reboot example).
 
 ## Step 5 — Install a package (Ubuntu)
 
