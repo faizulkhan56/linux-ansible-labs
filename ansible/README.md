@@ -10,13 +10,14 @@ This folder is a **ready-to-run Ansible skeleton** that matches the labs in `doc
 
 ```bash
 cd ansible
-ansible -i inventory.ini all -m ping
+ansible -i inventory.ini nodes -m ping
 ```
 
 3. Run a playbook:
 
 ```bash
 ansible-playbook -i inventory.ini playbooks/01-ping.yml
+ansible-playbook -i inventory-command-lab.ini playbooks/command-demo.yml
 ansible-playbook -i inventory.ini playbooks/02-nginx.yml
 ansible-playbook -i inventory.ini playbooks/03-users.yml
 ```
@@ -25,8 +26,9 @@ ansible-playbook -i inventory.ini playbooks/03-users.yml
 
 - `ansible.cfg`: defaults (host key checking off for labs)
 - `inventory.ini`: example inventory for 2 nodes
+- `inventory-command-lab.ini`: sample inventory for `02-LAB-COMMAND-MODULE-BASIC.md`
 - `group_vars/all.yml`: common vars
-- `playbooks/`: sample playbooks
+- `playbooks/`: sample playbooks (includes `command-demo.yml` for the command module lab)
 - `roles/nginx/`: example role used by `playbooks/02-nginx.yml`
 
 ## Safety notes (for training)

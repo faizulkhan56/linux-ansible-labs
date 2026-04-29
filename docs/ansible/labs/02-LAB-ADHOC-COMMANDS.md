@@ -148,6 +148,7 @@ ansible -i inventory.ini nodes -m command -a "htop --version"
 
 ## Notes
 
+- Next lab in depth: **`02-LAB-COMMAND-MODULE-BASIC.md`** (more `command` ad-hoc patterns + `command-demo.yml` playbook).
 - Prefer `command` over `shell` unless you need shell features (pipes, redirects).
 - Use `-b` (become) for tasks needing sudo.
 - If you see “Could not match supplied host pattern ‘nodes’”, either:

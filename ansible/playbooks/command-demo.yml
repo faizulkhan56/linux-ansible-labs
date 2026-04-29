@@ -1,0 +1,51 @@
+---
+# Command module demo — see docs/ansible/labs/02-LAB-COMMAND-MODULE-BASIC.md
+- name: Command module demo
+  hosts: nodes
+  become: true
+
+  tasks:
+    - name: Check uptime
+      ansible.builtin.command: uptime
+      register: uptime_out
+
+    - name: Show uptime output
+      ansible.builtin.debug:
+        var: uptime_out.stdout
+
+    - name: Check hostname
+      ansible.builtin.command: hostname
+      register: host_out
+
+    - name: Show hostname
+      ansible.builtin.debug:
+        var: host_out.stdout
+
+    - name: Check disk usage
+      ansible.builtin.command: df -h
+      register: disk_out
+
+    - name: Show disk (line by line)
+      ansible.builtin.debug:
+        var: disk_out.stdout_lines
+
+    - name: Check memory
+      ansible.builtin.command: free -m
+      register: mem_out
+
+    - name: Show memory
+      ansible.builtin.debug:
+        var: mem_out.stdout
+
+    - name: Create demo file
+      ansible.builtin.command: touch /tmp/ansible-demo.txt
+      args:
+        creates: /tmp/ansible-demo.txt
+
+    - name: Last reboot entry
+      ansible.builtin.command: last -n 1 reboot
+      register: reboot_out
+
+    - name: Show last reboot line
+      ansible.builtin.debug:
+        var: reboot_out.stdout
